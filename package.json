@@ -5,7 +5,10 @@
   "scripts": {
     "build": "pnpm -r build",
     "test": "pnpm -r test",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "db:up": "docker compose -f apps/game-server/dev.docker-compose.yaml up -d",
+    "db:down": "docker compose -f apps/game-server/dev.docker-compose.yaml down",
+    "db:logs": "docker compose -f apps/game-server/dev.docker-compose.yaml logs -f"
   },
   "devDependencies": {
     "typescript": "^5.5.0"
