@@ -1,0 +1,25 @@
+{
+  "name": "@stagent/db-schema",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc -p .",
+    "typecheck": "tsc -p . --noEmit",
+    "drizzle:generate": "drizzle-kit generate",
+    "drizzle:migrate": "tsx src/migrate.ts",
+    "drizzle:push": "drizzle-kit push"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.33.0",
+    "postgres": "^3.4.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "drizzle-kit": "^0.24.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.5.0"
+  }
+}
