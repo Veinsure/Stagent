@@ -64,6 +64,14 @@ async function dispatch(deps: HandlerDeps, conn: McpConnection, name: ToolName, 
       if (!deps.registry.has(table_id)) throw new McpToolError("table_not_found", table_id)
       return await deps.registry.get(table_id).enqueue({ kind: "leave", agent_id: conn.agent_id })
     }
+    case "wait_for_my_turn": {
+      if (!conn.agent_id) throw new McpToolError("not_authenticated", "")
+      const { table_id, timeout_s } = input as { table_id: string; timeout_s?: number }
+      if (!deps.registry) throw new McpToolError("internal_error", "registry not initialized")
+      if (!deps.registry.has(table_id)) throw new McpToolError("table_not_found", table_id)
+      const deadline_ms = Date.now() + (timeout_s ?? 60) * 1000
+      return await deps.registry.get(table_id).awaitTurn(conn.agent_id, deadline_ms)
+    }
     default: throw new McpToolError("unknown_tool", `dispatch miss: ${name}`)
   }
 }

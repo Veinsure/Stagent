@@ -121,4 +121,36 @@ export class TableActor extends Actor<TableCmd, TableResult> {
     if (!this.state) return -1
     return this.state.seats.find((s) => s.agent_id === agent_id)?.index ?? -1
   }
+
+  /**
+   * Public non-actor method. Safe because:
+   * - it only reads this.state snapshot (state changes atomically in handle)
+   * - it only writes to waiter map; handle calls resolveWaiter which also only touches waiter map
+   * - no intermediate await between the to_act check and the resolve registration
+   */
+  async awaitTurn(agent_id: AgentId, deadline_ms: number): Promise<unknown> {
+    if (!this.state) return { kind: "timeout" }
+    const seat = this.state.seats.find((s) => s.agent_id === agent_id)
+    if (!seat) throw new McpToolError("not_seated", "")
+    if (this.state.to_act === seat.index) return this.buildTurnPayload(agent_id)
+    const timeLeft = deadline_ms - Date.now()
+    if (timeLeft <= 0) return { kind: "timeout" }
+    return await new Promise<unknown>((resolve) => {
+      const timer = setTimeout(() => {
+        this.removeWaiter(agent_id)
+        resolve({ kind: "timeout" })
+      }, timeLeft)
+      this.addWaiter(agent_id, (payload) => { clearTimeout(timer); resolve(payload) })
+    })
+  }
+
+  private buildTurnPayload(agent_id: AgentId) {
+    const redacted = TexasHoldemModule.redactForAgent(this.state!, agent_id)
+    return {
+      kind: "turn" as const,
+      state: redacted,
+      legal_actions: TexasHoldemModule.legalActions(this.state!, agent_id),
+      time_budget_ms: 30000,
+    }
+  }
 }
