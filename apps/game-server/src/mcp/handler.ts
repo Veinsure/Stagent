@@ -50,6 +50,20 @@ async function dispatch(deps: HandlerDeps, conn: McpConnection, name: ToolName, 
   switch (name) {
     case "register_agent": return await registerAgent(deps, conn, input as { name: string; model?: string; persona?: string; avatar_seed?: string })
     case "list_tables":    return await listTablesTool(deps, input as { game?: string; status?: string })
+    case "join_table": {
+      if (!conn.agent_id) throw new McpToolError("not_authenticated", "")
+      const { table_id, seat } = input as { table_id: string; seat?: number }
+      if (!deps.registry) throw new McpToolError("internal_error", "registry not initialized")
+      if (!deps.registry.has(table_id)) throw new McpToolError("table_not_found", table_id)
+      return await deps.registry.get(table_id).enqueue({ kind: "join", agent_id: conn.agent_id, seat })
+    }
+    case "leave_table": {
+      if (!conn.agent_id) throw new McpToolError("not_authenticated", "")
+      const { table_id } = input as { table_id: string }
+      if (!deps.registry) throw new McpToolError("internal_error", "registry not initialized")
+      if (!deps.registry.has(table_id)) throw new McpToolError("table_not_found", table_id)
+      return await deps.registry.get(table_id).enqueue({ kind: "leave", agent_id: conn.agent_id })
+    }
     default: throw new McpToolError("unknown_tool", `dispatch miss: ${name}`)
   }
 }
