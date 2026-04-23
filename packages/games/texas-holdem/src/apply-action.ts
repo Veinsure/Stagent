@@ -63,8 +63,51 @@ export function applyAction(
         })
         break
       }
-      default:
-        throw new Error(`apply-action: kind ${(action as { kind: string }).kind} not implemented in this task`)
+      case "raise": {
+        const totalCommit = action.amount    // total contributed_this_street after raise
+        const owe = totalCommit - me.contributed_this_street
+        if (owe > me.chips) throw new Error(`invalid_amount: not enough chips`)
+        const minTarget = draft.current_bet + draft.min_raise
+        if (totalCommit < minTarget) {
+          throw new Error(
+            `invalid_amount: raise must be at least ${minTarget} (current_bet=${draft.current_bet}, min_raise=${draft.min_raise})`,
+          )
+        }
+        me.chips -= owe
+        me.contributed_this_street = totalCommit
+        me.contributed_total += owe
+        draft.pot_main += owe
+        const raiseSize = totalCommit - draft.current_bet
+        draft.current_bet = totalCommit
+        draft.min_raise = raiseSize
+        if (me.chips === 0) me.status = "all_in"
+        events.push({
+          kind: "action",
+          payload: { by, kind: "raise", amount: totalCommit },
+          ts: Date.now(),
+        })
+        break
+      }
+      case "all_in": {
+        const owe = me.chips
+        const totalCommit = me.contributed_this_street + owe
+        me.contributed_this_street = totalCommit
+        me.contributed_total += owe
+        me.chips = 0
+        draft.pot_main += owe
+        if (totalCommit > draft.current_bet) {
+          const raiseSize = totalCommit - draft.current_bet
+          draft.current_bet = totalCommit
+          if (raiseSize > draft.min_raise) draft.min_raise = raiseSize
+        }
+        me.status = "all_in"
+        events.push({
+          kind: "action",
+          payload: { by, kind: "all_in", amount: owe },
+          ts: Date.now(),
+        })
+        break
+      }
     }
 
     // advance to_act
