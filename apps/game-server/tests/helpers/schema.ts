@@ -30,7 +30,7 @@ export async function freshSchema(): Promise<FreshSchema> {
   const sql = postgres(baseUrl, { max: 2, connection: { search_path: schemaName } })
   const db = drizzle(sql)
   try {
-    await migrate(db, { migrationsFolder })
+    await migrate(db, { migrationsFolder, migrationsSchema: schemaName })
   } catch (err) {
     await sql.end().catch(() => {})
     const admin = postgres(baseUrl, { max: 1 })

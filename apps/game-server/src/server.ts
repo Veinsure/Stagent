@@ -1,8 +1,10 @@
 import { createServer, type Server } from "node:http"
 import { WebSocketServer, type WebSocket } from "ws"
+import { newConnection, type McpConnection } from "./mcp/connection.js"
+import { attachWs, type RequestFrame, type ResponseFrame } from "./mcp/transport-ws.js"
 
 export interface ServerDeps {
-  onWsConnection?: (ws: WebSocket) => void
+  handle?: (conn: McpConnection, frame: RequestFrame) => Promise<ResponseFrame>
 }
 
 export function createGameServer(deps: ServerDeps): { server: Server; close: () => Promise<void> } {
@@ -17,11 +19,12 @@ export function createGameServer(deps: ServerDeps): { server: Server; close: () 
   })
 
   const wss = new WebSocketServer({ server, path: "/mcp" })
-  wss.on("connection", (ws) => {
+  wss.on("connection", (ws: WebSocket) => {
     try {
-      deps.onWsConnection?.(ws)
+      const conn = newConnection(ws)
+      if (deps.handle) attachWs(conn, deps.handle)
     } catch (err) {
-      console.error("onWsConnection threw:", err)
+      console.error("connection init failed:", err)
       ws.close(1011, "internal error")
     }
   })
