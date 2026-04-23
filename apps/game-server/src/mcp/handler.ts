@@ -5,9 +5,11 @@ import crypto from "node:crypto"
 import type { Db } from "../db/client.js"
 import type { McpConnection } from "./connection.js"
 import type { RequestFrame, ResponseFrame } from "./transport-ws.js"
+import type { TableRegistry } from "../actors/table-registry.js"
 
 export interface HandlerDeps {
   db: Db
+  registry?: TableRegistry
 }
 
 export function createHandler(deps: HandlerDeps) {
