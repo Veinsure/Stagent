@@ -9,7 +9,12 @@ export interface WsClient {
   close(): void
 }
 
-export async function createMcpClientWs(url: string): Promise<WsClient> {
+export interface WsClientOptions {
+  callTimeoutMs?: number
+}
+
+export async function createMcpClientWs(url: string, opts: WsClientOptions = {}): Promise<WsClient> {
+  const callTimeoutMs = opts.callTimeoutMs ?? 30_000
   const ws = new WebSocket(url)
   const pending = new Map<string, Pending>()
   let seq = 0
@@ -20,16 +25,24 @@ export async function createMcpClientWs(url: string): Promise<WsClient> {
     ws.once("error", reject)
   })
 
+  const failAll = (reason: Error) => {
+    for (const [, p] of pending) p.reject(reason)
+    pending.clear()
+  }
+  ws.on("error", (e) => failAll(e instanceof Error ? e : new Error(String(e))))
+  ws.on("close", () => failAll(new Error("ws closed")))
+
   ws.on("message", (raw) => {
     try {
       const msg = JSON.parse(raw.toString())
-      const p = pending.get(msg.id)
+      const id = String(msg.id)
+      const p = pending.get(id)
       if (!p) return
-      pending.delete(msg.id)
+      pending.delete(id)
       if (msg.error) p.reject(new Error(`${msg.error.code}: ${msg.error.message}`))
       else p.resolve(msg.result)
     } catch (e) {
-      // ignore malformed frames
+      console.warn("mcp-tools ws: malformed frame", e)
     }
   })
 
@@ -38,6 +51,10 @@ export async function createMcpClientWs(url: string): Promise<WsClient> {
       const id = String(++seq)
       return new Promise((resolve, reject) => {
         pending.set(id, { resolve: resolve as (v: unknown) => void, reject })
+        const timer = setTimeout(() => {
+          if (pending.delete(id)) reject(new Error(`mcp-tools ws: call timeout after ${callTimeoutMs}ms (${name})`))
+        }, callTimeoutMs)
+        timer.unref?.()
         ws.send(JSON.stringify({ id, method: name, params: args, owner_token: ownerToken }))
       })
     },
