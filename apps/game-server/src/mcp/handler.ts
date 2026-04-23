@@ -1,5 +1,5 @@
 import { toolSchemas, McpToolError, type ToolName } from "@stagent/mcp-tools"
-import { agents } from "@stagent/db-schema"
+import { agents, tables, tableSeats } from "@stagent/db-schema"
 import { eq } from "drizzle-orm"
 import crypto from "node:crypto"
 import type { Db } from "../db/client.js"
@@ -47,8 +47,27 @@ async function verifyOwner(db: Db, conn: McpConnection, token: string): Promise<
 async function dispatch(deps: HandlerDeps, conn: McpConnection, name: ToolName, input: unknown): Promise<unknown> {
   switch (name) {
     case "register_agent": return await registerAgent(deps, conn, input as { name: string; model?: string; persona?: string; avatar_seed?: string })
+    case "list_tables":    return await listTablesTool(deps, input as { game?: string; status?: string })
     default: throw new McpToolError("unknown_tool", `dispatch miss: ${name}`)
   }
+}
+
+async function listTablesTool(deps: HandlerDeps, input: { game?: string; status?: string }) {
+  const rows = await deps.db.select().from(tables)
+  const seatCounts = await deps.db.select({ table_id: tableSeats.table_id }).from(tableSeats)
+  const countMap = new Map<string, number>()
+  for (const s of seatCounts) countMap.set(s.table_id, (countMap.get(s.table_id) ?? 0) + 1)
+  return rows
+    .filter((r) => !input.game   || r.game_kind === input.game)
+    .filter((r) => !input.status || r.status    === input.status)
+    .map((r) => ({
+      id: r.id,
+      slug: r.slug,
+      game_kind: r.game_kind,
+      status: r.status,
+      seats_filled: countMap.get(r.id) ?? 0,
+      max_seats: r.max_seats,
+    }))
 }
 
 async function registerAgent(deps: HandlerDeps, conn: McpConnection, input: { name: string; model?: string; persona?: string; avatar_seed?: string }) {
