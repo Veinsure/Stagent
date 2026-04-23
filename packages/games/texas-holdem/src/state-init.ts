@@ -28,8 +28,13 @@ export function createTable(opts: TableOpts): TexasHoldemState {
   }
 
   const button = 0
-  const sbIdx = (button + 1) % seats.length
-  const bbIdx = (button + 2) % seats.length
+  // Heads-up (2-handed): button is the small blind and acts first preflop.
+  // 3+ handed: SB sits after button, BB after SB, UTG after BB.
+  const isHeadsUp = seats.length === 2
+  const sbIdx = isHeadsUp ? button : (button + 1) % seats.length
+  const bbIdx = isHeadsUp
+    ? (button + 1) % seats.length
+    : (button + 2) % seats.length
 
   // Post blinds
   const sbAmt = Math.min(blinds.sb, seats[sbIdx]!.chips)
@@ -41,8 +46,8 @@ export function createTable(opts: TableOpts): TexasHoldemState {
   seats[bbIdx]!.contributed_this_street = bbAmt
   seats[bbIdx]!.contributed_total = bbAmt
 
-  // Preflop first to act = seat after BB
-  const utg = (bbIdx + 1) % seats.length
+  // Preflop first to act: heads-up = button (SB); 3+ handed = seat after BB.
+  const utg = isHeadsUp ? button : (bbIdx + 1) % seats.length
 
   return {
     seats,
