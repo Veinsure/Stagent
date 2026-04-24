@@ -10,7 +10,8 @@
     "typecheck": "tsc -p . --noEmit",
     "drizzle:generate": "drizzle-kit generate",
     "drizzle:migrate": "tsx src/migrate.ts",
-    "drizzle:push": "drizzle-kit push"
+    "drizzle:push": "drizzle-kit push",
+    "drizzle:seed": "tsx src/seed.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.33.0",

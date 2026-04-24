@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/postgres-js"
 import postgres from "postgres"
 import { eq } from "drizzle-orm"
+import { fileURLToPath } from "node:url"
 import { tables } from "./schema.js"
 
 const DEMO_TABLES = [
@@ -27,4 +28,16 @@ export async function seedDemoTables(databaseUrl: string): Promise<void> {
   } finally {
     await sql.end()
   }
+}
+
+// CLI entry point (run via `pnpm drizzle:seed`)
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  const url = process.env.DATABASE_URL
+  if (!url) {
+    console.error("DATABASE_URL is required")
+    process.exit(1)
+  }
+  seedDemoTables(url)
+    .then(() => { console.log("demo tables seeded"); process.exit(0) })
+    .catch((e) => { console.error(e); process.exit(1) })
 }

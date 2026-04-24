@@ -22,10 +22,9 @@ async function main() {
   console.log(`game-server listening on :${config.port}`)
 
   // Spawn dumb bots if enabled
-  const botCount = Number(process.env.DUMB_BOTS ?? 0)
-  if (botCount > 0) {
-    console.log(`Spawning ${botCount} dumb bots...`)
-    for (let i = 0; i < botCount; i++) {
+  if (config.devSpawnBot > 0) {
+    console.log(`Spawning ${config.devSpawnBot} dumb bots...`)
+    for (let i = 0; i < config.devSpawnBot; i++) {
       spawnDumbBotLoopback({ db, registry, name: `dumb-bot-${i}` }).catch((e) => {
         console.error(`dumb-bot-${i} failed:`, e)
       })
