@@ -81,6 +81,15 @@ async function run(
   }
 
   let idleSince: number | null = null
+  const checkIdle = async (): Promise<boolean> => {
+    const hasHuman = await tableHasHuman(deps.db, deps.tableId)
+    if (hasHuman) {
+      idleSince = null
+      return false
+    }
+    if (idleSince === null) idleSince = Date.now()
+    return Date.now() - idleSince >= deps.idlePauseMs
+  }
   try {
     while (!signal.aborted) {
       let turn: any
@@ -91,11 +100,9 @@ async function run(
         continue
       }
       if (!turn || turn.kind === "timeout") {
-        if (idleSince === null) idleSince = Date.now()
-        if (await shouldIdlePause(deps, idleSince)) break
+        if (await checkIdle()) break
         continue
       }
-      idleSince = null
 
       const ctx = buildContext(turn)
       const budgetMs = Math.min(turn.time_budget_ms ?? 30_000, 30_000)
@@ -135,6 +142,7 @@ async function run(
         if (signal.aborted) break
         // stale turn (someone else acted, hand ended, etc.) — just loop
       }
+      if (await checkIdle()) break
     }
   } finally {
     try {
@@ -174,17 +182,21 @@ function pickSafeAction(legal: LegalAction[]): { kind: "check" } | { kind: "call
   return { kind: "fold" }
 }
 
+export async function tableHasHuman(db: Db, tableId: string): Promise<boolean> {
+  const rows = await db
+    .select({ agent_id: tableSeats.agent_id, persona: agentsTable.persona })
+    .from(tableSeats)
+    .leftJoin(agentsTable, eq(agentsTable.id, tableSeats.agent_id))
+    .where(eq(tableSeats.table_id, tableId))
+  return rows.some((r) => !(r.persona ?? "").startsWith("house-bot:"))
+}
+
+/** Retained as a small helper for unit testing the idle-window math + DB check. */
 export async function shouldIdlePause(
   deps: { db: Db; tableId: string; idlePauseMs: number },
   idleSince: number | null,
 ): Promise<boolean> {
   if (idleSince === null) return false
   if (Date.now() - idleSince < deps.idlePauseMs) return false
-  const rows = await deps.db
-    .select({ agent_id: tableSeats.agent_id, persona: agentsTable.persona })
-    .from(tableSeats)
-    .leftJoin(agentsTable, eq(agentsTable.id, tableSeats.agent_id))
-    .where(eq(tableSeats.table_id, deps.tableId))
-  const hasHuman = rows.some((r) => !(r.persona ?? "").startsWith("house-bot:"))
-  return !hasHuman
+  return !(await tableHasHuman(deps.db, deps.tableId))
 }
