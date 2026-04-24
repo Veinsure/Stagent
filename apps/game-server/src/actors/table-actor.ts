@@ -29,8 +29,6 @@ export type TableCmd =
 
 type TableResult = unknown
 
-const TURN_BUDGET_MS = Number(process.env.TURN_BUDGET_MS ?? 30000)
-
 export class TableActor extends Actor<TableCmd, TableResult> {
   state: TexasHoldemState | null = null      // null while waiting for first 2 seats
   private currentHandId: string | null = null
@@ -40,6 +38,7 @@ export class TableActor extends Actor<TableCmd, TableResult> {
   private droppedSince: Map<AgentId, number> = new Map()
   private dropTimers: Map<AgentId, NodeJS.Timeout> = new Map()
   private readonly reconnectGraceMs = Number(process.env.RECONNECT_GRACE_MS ?? 60000)
+  private readonly turnBudgetMs = Number(process.env.TURN_BUDGET_MS ?? 30000)
 
   constructor(public readonly meta: TableMeta, private db: Db) {
     super()
@@ -230,7 +229,7 @@ export class TableActor extends Actor<TableCmd, TableResult> {
     if (!seat) return
     this.turnTimer = setTimeout(() => {
       this.enqueue({ kind: "turn_timeout_fired", seat_idx: seat.index }).catch(() => {})
-    }, TURN_BUDGET_MS)
+    }, this.turnBudgetMs)
   }
 
   private clearTurnTimer(): void {
@@ -336,7 +335,7 @@ export class TableActor extends Actor<TableCmd, TableResult> {
       kind: "turn" as const,
       state: redacted,
       legal_actions: TexasHoldemModule.legalActions(this.state!, agent_id),
-      time_budget_ms: 30000,
+      time_budget_ms: this.turnBudgetMs,
     }
   }
 }
