@@ -1,4 +1,4 @@
-import { AGENT_GRACE_MS, BOT_ACT_DELAY_MS, DEMO_TABLES, isDemoRoom, STARTING_CHIPS } from "./config.js"
+import { AGENT_GRACE_MS, BOT_ACT_DELAY_MS, DEMO_TABLES, IDLE_HIBERNATE_MS, isDemoRoom, STARTING_CHIPS } from "./config.js"
 import type { DOState, Seat } from "./state.js"
 import { publicView } from "./state.js"
 import { advanceBotsOnly, engineSeatToDoSeat, refillBankrupt, startHand } from "./game-loop.js"
@@ -67,7 +67,22 @@ export class TableDO {
       await this.reapIdleAgents()
       return new Response("ok")
     }
+    if (parts[2] === "__checkIdle") {
+      await this.checkIdle()
+      return new Response("ok")
+    }
     return new Response("not implemented", { status: 501 })
+  }
+
+  protected async checkIdle(): Promise<void> {
+    const stored = await this.ctx.storage.get<DOState>(STATE_KEY)
+    if (!stored) return
+    const activeAgents = stored.seats.some(x => x.kind === "agent")
+    const activeWs = this.ctx.getWebSockets("viewer").length > 0
+    if (activeAgents || activeWs) return
+    if (Date.now() - stored.lastActivityMs < IDLE_HIBERNATE_MS) return
+    await this.ctx.storage.deleteAll()
+    this.state = null
   }
 
   protected async reapIdleAgents(): Promise<void> {
