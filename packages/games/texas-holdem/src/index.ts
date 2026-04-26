@@ -43,3 +43,4 @@ export const TexasHoldemModule: GameModule<TexasHoldemState, TexasHoldemAction, 
 }
 
 export * from "./types.js"
+export type { LegalAction } from "./legal-actions.js"
