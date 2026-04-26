@@ -25,9 +25,10 @@ describe("game loop", () => {
   })
 
   it("advanceBotsOnly runs a hand to showdown when only bots seated", () => {
-    let s = startHand(mkAllBotState(), { seed: "test-seed-2" })
-    s = advanceBotsOnly(s, () => 0.5)
-    expect(s.engine!.street).toBe("showdown")
+    const started = startHand(mkAllBotState(), { seed: "test-seed-2" })
+    const { state, steps } = advanceBotsOnly(started, () => 0.5)
+    expect(state.engine!.street).toBe("showdown")
+    expect(steps.length).toBeGreaterThan(0)
   })
 
   it("advanceBotsOnly stops when an agent seat is to act", () => {
@@ -36,10 +37,9 @@ describe("game loop", () => {
       kind: "agent", name: "User", chips: STARTING_CHIPS,
       mcpSessionId: "s1", lastSeenMs: Date.now(),
     }
-    let after = startHand(base, { seed: "test-seed-3" })
-    after = advanceBotsOnly(after, () => 0.5)
+    const started = startHand(base, { seed: "test-seed-3" })
+    const { state: after } = advanceBotsOnly(started, () => 0.5)
     if (after.engine!.street !== "showdown") {
-      // engine.to_act maps to seat index 2 in the DO (the agent)
       const engineToAct = after.engine!.to_act
       if (engineToAct !== null) {
         const engineSeats = after.engine!.seats

@@ -1,5 +1,6 @@
 import { TexasHoldemModule } from "@stagent/texas-holdem"
 import type { LegalAction } from "@stagent/texas-holdem"
+import type { BroadcastEvent } from "@stagent/shared"
 import type { DOState } from "./state.js"
 import { BLINDS, STARTING_CHIPS } from "./config.js"
 import { decideRandom } from "./random-bot.js"
@@ -46,9 +47,19 @@ export function engineSeatToDoSeat(s: DOState, engineIdx: number): number {
   return entry.i
 }
 
-export function advanceBotsOnly(s: DOState, rng: () => number): DOState {
-  if (!s.engine) return s
+export interface BotStep {
+  doIdx: number
+  action: { kind: string; amount?: number }
+}
+
+export function advanceBotsOnly(
+  s: DOState,
+  rng: () => number,
+): { state: DOState; steps: BotStep[]; engineEvents: BroadcastEvent[] } {
+  if (!s.engine) return { state: s, steps: [], engineEvents: [] }
   let engine = s.engine
+  const steps: BotStep[] = []
+  const engineEvents: BroadcastEvent[] = []
   while (engine.street !== "showdown" && engine.to_act !== null) {
     const doIdx = engineSeatToDoSeat(s, engine.to_act)
     const seat = s.seats[doIdx]
@@ -63,6 +74,13 @@ export function advanceBotsOnly(s: DOState, rng: () => number): DOState {
     const action = decideRandom(legal, rng)
     const result = TexasHoldemModule.applyAction(engine, action, by)
     engine = result.state
+    steps.push({
+      doIdx,
+      action: action.kind === "raise"
+        ? { kind: "raise", amount: action.amount }
+        : { kind: action.kind },
+    })
+    engineEvents.push(...result.events)
   }
-  return { ...s, engine }
+  return { state: { ...s, engine }, steps, engineEvents }
 }

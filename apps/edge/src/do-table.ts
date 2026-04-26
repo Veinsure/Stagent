@@ -1,6 +1,8 @@
 import { BOT_ACT_DELAY_MS, DEMO_TABLES, isDemoRoom, STARTING_CHIPS } from "./config.js"
 import type { DOState, Seat } from "./state.js"
+import { publicView } from "./state.js"
 import { advanceBotsOnly, engineSeatToDoSeat, refillBankrupt, startHand } from "./game-loop.js"
+import { broadcastEvent, handleWsUpgrade } from "./ws-handler.js"
 
 const STATE_KEY = "state"
 
@@ -16,6 +18,15 @@ export class TableDO {
     if (!room) return new Response("missing room", { status: 400 })
     await this.ensureState(room)
 
+    if (parts[2] === "ws") {
+      if (req.headers.get("Upgrade") !== "websocket") {
+        return new Response("expected ws upgrade", { status: 426 })
+      }
+      const res = handleWsUpgrade(this.ctx)
+      const s = await this.readState()
+      queueMicrotask(() => broadcastEvent(this.ctx, { type: "snapshot", state: publicView(s) }))
+      return res
+    }
     if (parts[2] === "__init") return new Response("ok")
     if (parts[2] === "__startHand") {
       const s = await this.readState()
@@ -34,14 +45,29 @@ export class TableDO {
   async alarm(): Promise<void> {
     const s = await this.readState()
     if (!s.engine) return
-    const next = advanceBotsOnly(s, () => Math.random())
+    const { state: advanced, steps } = advanceBotsOnly(s, () => Math.random())
+
+    for (const step of steps) {
+      broadcastEvent(this.ctx, {
+        type: "action",
+        seat: step.doIdx,
+        action: step.action.kind,
+        ...(step.action.amount !== undefined ? { amount: step.action.amount } : {}),
+      })
+    }
 
     let after: DOState
-    if (next.engine?.street === "showdown") {
-      const refilled = refillBankrupt(next)
-      after = startHand(refilled, { seed: `seed-${Date.now()}-${next.handsPlayed}` })
+    if (advanced.engine?.street === "showdown") {
+      broadcastEvent(this.ctx, { type: "showdown", winners: [], reveal: {} })
+      const refilled = refillBankrupt(advanced)
+      after = startHand(refilled, { seed: `seed-${Date.now()}-${advanced.handsPlayed}` })
+      broadcastEvent(this.ctx, {
+        type: "hand_start",
+        handId: after.handsPlayed,
+        dealer: after.engine?.button ?? 0,
+      })
     } else {
-      after = next
+      after = advanced
     }
     await this.writeState(after)
 
@@ -54,6 +80,9 @@ export class TableDO {
       }
     }
   }
+
+  async webSocketMessage(_ws: WebSocket, _msg: string | ArrayBuffer): Promise<void> {}
+  async webSocketClose(_ws: WebSocket, _code: number, _reason: string, _wasClean: boolean): Promise<void> {}
 
   async readState(): Promise<DOState> {
     if (!this.state) throw new Error("state not loaded")
