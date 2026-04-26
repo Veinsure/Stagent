@@ -24,7 +24,16 @@ export class TableDO {
     return this.state
   }
 
-  protected async ensureState(room: string): Promise<void> {
+  async writeState(next: DOState): Promise<void> {
+    this.state = next
+    await this.ctx.storage.put(STATE_KEY, next)
+  }
+
+  dropCachedState(): void {
+    this.state = null
+  }
+
+  async ensureState(room: string): Promise<void> {
     if (this.state) return
     const stored = await this.ctx.storage.get<DOState>(STATE_KEY)
     if (stored) { this.state = stored; return }
