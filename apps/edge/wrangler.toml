@@ -1,0 +1,12 @@
+name = "stagent-edge"
+main = "src/worker.ts"
+compatibility_date = "2026-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[durable_objects.bindings]]
+name = "TABLE"
+class_name = "TableDO"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["TableDO"]
