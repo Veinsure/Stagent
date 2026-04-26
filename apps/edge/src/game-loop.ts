@@ -1,8 +1,20 @@
 import { TexasHoldemModule } from "@stagent/texas-holdem"
 import type { LegalAction } from "@stagent/texas-holdem"
 import type { DOState } from "./state.js"
-import { BLINDS } from "./config.js"
+import { BLINDS, STARTING_CHIPS } from "./config.js"
 import { decideRandom } from "./random-bot.js"
+
+const REFILL_THRESHOLD = BLINDS.bb * 2
+
+export function refillBankrupt(s: DOState): DOState {
+  const seats = s.seats.map((seat) => {
+    if ((seat.kind === "bot" || seat.kind === "agent") && seat.chips < REFILL_THRESHOLD) {
+      return { ...seat, chips: STARTING_CHIPS }
+    }
+    return seat
+  })
+  return { ...s, seats }
+}
 
 function seatToAgentId(idx: number, name: string): string {
   return `seat-${idx}-${name}`

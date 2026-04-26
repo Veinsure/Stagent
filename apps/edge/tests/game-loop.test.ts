@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 import { env, runInDurableObject } from "cloudflare:test"
-import { startHand, advanceBotsOnly } from "../src/game-loop.js"
+import { startHand, advanceBotsOnly, refillBankrupt } from "../src/game-loop.js"
 import type { TableDO } from "../src/do-table.js"
 import type { DOState, Seat } from "../src/state.js"
 import { STARTING_CHIPS } from "../src/config.js"
@@ -47,6 +47,19 @@ describe("game loop", () => {
         expect(acting.agent_id).toContain("User")
       }
     }
+  })
+})
+
+describe("bankruptcy refill", () => {
+  it("refillBankrupt tops up to 1000 when chips < 2*BB", () => {
+    const s = mkAllBotState()
+    s.seats[0] = { kind: "bot", name: "Broke", chips: 0 }
+    s.seats[1] = { kind: "bot", name: "Low", chips: 5 }
+    const after = refillBankrupt(s)
+    const s0 = after.seats[0]!, s1 = after.seats[1]!, s2 = after.seats[2]!
+    if (s0.kind !== "empty") expect(s0.chips).toBe(STARTING_CHIPS)
+    if (s1.kind !== "empty") expect(s1.chips).toBe(STARTING_CHIPS)
+    if (s2.kind !== "empty") expect(s2.chips).toBe(STARTING_CHIPS)
   })
 })
 

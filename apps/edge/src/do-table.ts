@@ -1,6 +1,6 @@
 import { BOT_ACT_DELAY_MS, DEMO_TABLES, isDemoRoom, STARTING_CHIPS } from "./config.js"
 import type { DOState, Seat } from "./state.js"
-import { advanceBotsOnly, engineSeatToDoSeat, startHand } from "./game-loop.js"
+import { advanceBotsOnly, engineSeatToDoSeat, refillBankrupt, startHand } from "./game-loop.js"
 
 const STATE_KEY = "state"
 
@@ -38,7 +38,8 @@ export class TableDO {
 
     let after: DOState
     if (next.engine?.street === "showdown") {
-      after = startHand(next, { seed: `seed-${Date.now()}-${next.handsPlayed}` })
+      const refilled = refillBankrupt(next)
+      after = startHand(refilled, { seed: `seed-${Date.now()}-${next.handsPlayed}` })
     } else {
       after = next
     }
