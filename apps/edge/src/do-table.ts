@@ -4,6 +4,7 @@ import { publicView } from "./state.js"
 import { advanceBotsOnly, engineSeatToDoSeat, refillBankrupt, startHand } from "./game-loop.js"
 import { broadcastEvent, handleWsUpgrade } from "./ws-handler.js"
 import { handleMcpRequest } from "./mcp-handler.js"
+import { sitDownInput } from "./mcp-schemas.js"
 
 const STATE_KEY = "state"
 
@@ -92,7 +93,37 @@ export class TableDO {
   async webSocketMessage(_ws: WebSocket, _msg: string | ArrayBuffer): Promise<void> {}
   async webSocketClose(_ws: WebSocket, _code: number, _reason: string, _wasClean: boolean): Promise<void> {}
 
-  protected async callMcpTool(name: string, _args: any, _sid: string): Promise<any> {
+  protected async callMcpTool(name: string, args: any, sid: string): Promise<any> {
+    const s = await this.readState()
+
+    if (name === "sit_down") {
+      const { name: agentName } = sitDownInput.parse(args)
+      const mySeat = s.seats.findIndex(
+        seat => seat.kind === "agent" && seat.mcpSessionId === sid,
+      )
+      if (mySeat >= 0) return { seat: mySeat, note: "already seated" }
+
+      const openIdx = s.seats.findIndex(seat => seat.kind === "empty")
+      if (openIdx < 0) throw new Error("seat_taken")
+
+      const next: DOState = { ...s, seats: [...s.seats] }
+      next.seats[openIdx] = {
+        kind: "agent", name: agentName, chips: STARTING_CHIPS,
+        mcpSessionId: sid, lastSeenMs: Date.now(),
+      }
+      next.lastActivityMs = Date.now()
+      await this.writeState(next)
+      broadcastEvent(this.ctx, { type: "seat_update", seat: openIdx, kind: "agent", name: agentName })
+
+      const seated = next.seats.filter(x => x.kind !== "empty").length
+      if (seated >= 2 && !next.engine) {
+        const started = startHand(next, { seed: `seed-${Date.now()}` })
+        await this.writeState(started)
+        await this.ctx.storage.setAlarm(Date.now() + BOT_ACT_DELAY_MS)
+      }
+      return { seat: openIdx }
+    }
+
     throw new Error(`tool ${name} not implemented`)
   }
 
