@@ -163,9 +163,6 @@ importers:
 
   packages/mcp-tools:
     dependencies:
-      ws:
-        specifier: ^8.18.0
-        version: 8.20.0
       zod:
         specifier: ^3.23.0
         version: 3.25.76
@@ -173,9 +170,6 @@ importers:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.39
-      '@types/ws':
-        specifier: ^8.5.0
-        version: 8.18.1
       typescript:
         specifier: ^5.5.0
         version: 5.9.3
