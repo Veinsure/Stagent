@@ -10,11 +10,12 @@ exits non-zero **after** all tests have already passed.
 This does **not** indicate a real test failure. To verify pass/fail, parse
 the line `Tests  N passed (M)` rather than relying on exit code.
 
-`isolatedStorage: false` works around the cleanup but breaks per-test DO
-isolation, so tests leak state into each other. Not acceptable.
+**Workaround in use:** `isolatedStorage: false`. Tests must use unique
+room ids per case to avoid cross-test state leaks (e.g. router test uses
+`router-test-mcp`, do-init uses `demo-1` and `prv-xyz123`).
 
-CI plan: pin a non-Windows runner for `pnpm test`, or detect the EBUSY in
-a wrapper and treat it as success when the summary reports all-passed.
+CI plan: when porting to Linux runners, switch back to
+`isolatedStorage: true` for stronger isolation.
 
 ## Plan deviations
 
@@ -28,10 +29,21 @@ a wrapper and treat it as success when the summary reports all-passed.
   `worker.ts`. Reverted in Task 3 once `worker.ts` carries the real
   router.
 
-- **Task 3 router test for `/api/tables`:** plan asserted `status < 500`
-  but stubbed `tables-api.ts` returns `501 not implemented`. The intent
-  of the assertion is "URL was routed, not 404'd"; updated to
-  `expect(res.status).not.toBe(404)` to match.
+- **Task 3 router tests:** plan asserted `status < 500` for two routes
+  whose handlers (`tables-api` stub, DO with no MCP yet) correctly return
+  `501`. Updated both to `not.toBe(404)` to express the routing-only
+  intent. Also renamed the `/c/demo-1/mcp` test to use room id
+  `router-test-mcp` so it doesn't share a DO with the do-init test under
+  `isolatedStorage: false`.
+
+- **Task 0 spike retired:** `apps/edge/src/spike-worker.ts` and
+  `tests/spike-mcp-hello.test.ts` deleted in Task 4 once router landed —
+  spike fetched `/mcp` directly, which now correctly 404s through the
+  real router. Spike served its risk-validation purpose at Task 0 commit.
+
+- **`tests/env.d.ts`:** added module augmentation
+  `declare module "cloudflare:test" { interface ProvidedEnv extends Env }`
+  so `env.TABLE` typechecks in tests.
 
 ## Compatibility date
 
