@@ -3,6 +3,7 @@ import type { DOState, Seat } from "./state.js"
 import { publicView } from "./state.js"
 import { advanceBotsOnly, engineSeatToDoSeat, refillBankrupt, startHand } from "./game-loop.js"
 import { broadcastEvent, handleWsUpgrade } from "./ws-handler.js"
+import { handleMcpRequest } from "./mcp-handler.js"
 
 const STATE_KEY = "state"
 
@@ -18,6 +19,13 @@ export class TableDO {
     if (!room) return new Response("missing room", { status: 400 })
     await this.ensureState(room)
 
+    if (parts[2] === "mcp") {
+      return handleMcpRequest(req, {
+        getSessionId: () => req.headers.get("Mcp-Session-Id"),
+        newSessionId: () => crypto.randomUUID(),
+        callTool: (name, args, sid) => this.callMcpTool(name, args, sid),
+      })
+    }
     if (parts[2] === "ws") {
       if (req.headers.get("Upgrade") !== "websocket") {
         return new Response("expected ws upgrade", { status: 426 })
@@ -83,6 +91,10 @@ export class TableDO {
 
   async webSocketMessage(_ws: WebSocket, _msg: string | ArrayBuffer): Promise<void> {}
   async webSocketClose(_ws: WebSocket, _code: number, _reason: string, _wasClean: boolean): Promise<void> {}
+
+  protected async callMcpTool(name: string, _args: any, _sid: string): Promise<any> {
+    throw new Error(`tool ${name} not implemented`)
+  }
 
   async readState(): Promise<DOState> {
     if (!this.state) throw new Error("state not loaded")
