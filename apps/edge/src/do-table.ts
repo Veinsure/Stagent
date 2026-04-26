@@ -4,7 +4,7 @@ import { publicView } from "./state.js"
 import { advanceBotsOnly, engineSeatToDoSeat, refillBankrupt, startHand } from "./game-loop.js"
 import { broadcastEvent, handleWsUpgrade } from "./ws-handler.js"
 import { handleMcpRequest } from "./mcp-handler.js"
-import { sitDownInput } from "./mcp-schemas.js"
+import { actInput, sitDownInput } from "./mcp-schemas.js"
 import { TexasHoldemModule } from "@stagent/texas-holdem"
 
 const STATE_KEY = "state"
@@ -123,6 +123,77 @@ export class TableDO {
         await this.ctx.storage.setAlarm(Date.now() + BOT_ACT_DELAY_MS)
       }
       return { seat: openIdx }
+    }
+
+    if (name === "act") {
+      const parsed = actInput.parse(args)
+      const action = parsed.action
+      if (!s.engine) throw new Error("no_hand_in_progress")
+
+      const mySeat = s.seats.findIndex(seat => seat.kind === "agent" && seat.mcpSessionId === sid)
+      if (mySeat < 0) throw new Error("not_seated")
+
+      let myEngineIdx = -1
+      for (let i = 0; i < s.engine.seats.length; i++) {
+        if (engineSeatToDoSeat(s, i) === mySeat) { myEngineIdx = i; break }
+      }
+      if (myEngineIdx < 0) throw new Error("seat_mapping_error")
+      if (s.engine.to_act !== myEngineIdx) throw new Error("not_your_turn")
+
+      const myEngineSeat = s.engine.seats[myEngineIdx]!
+      const by = myEngineSeat.agent_id
+      const legal = TexasHoldemModule.legalActions(s.engine, by)
+      const matches = legal.find(la => la.kind === action)
+      if (!matches) throw new Error("illegal_action")
+
+      const engineAction =
+        action === "raise"
+          ? { kind: "raise" as const, amount: parsed.amount ?? (matches as { kind: "raise"; min: number }).min }
+          : action === "fold"
+          ? { kind: "fold" as const }
+          : action === "check"
+          ? { kind: "check" as const }
+          : action === "call"
+          ? { kind: "call" as const }
+          : { kind: "all_in" as const }
+
+      const result = TexasHoldemModule.applyAction(s.engine, engineAction, by)
+      const afterAct: DOState = { ...s, engine: result.state, lastActivityMs: Date.now() }
+      broadcastEvent(this.ctx, {
+        type: "action", seat: mySeat, action,
+        ...(parsed.amount !== undefined ? { amount: parsed.amount } : {}),
+      })
+      await this.writeState(afterAct)
+
+      const { state: advanced, steps } = advanceBotsOnly(afterAct, () => Math.random())
+      for (const step of steps) {
+        broadcastEvent(this.ctx, {
+          type: "action", seat: step.doIdx, action: step.action.kind,
+          ...(step.action.amount !== undefined ? { amount: step.action.amount } : {}),
+        })
+      }
+
+      let final: DOState
+      if (advanced.engine?.street === "showdown") {
+        broadcastEvent(this.ctx, { type: "showdown", winners: [], reveal: {} })
+        const refilled = refillBankrupt(advanced)
+        final = startHand(refilled, { seed: `seed-${Date.now()}-${advanced.handsPlayed}` })
+        broadcastEvent(this.ctx, {
+          type: "hand_start", handId: final.handsPlayed, dealer: final.engine?.button ?? 0,
+        })
+        await this.writeState(final)
+        await this.ctx.storage.setAlarm(Date.now() + BOT_ACT_DELAY_MS)
+      } else {
+        final = advanced
+        await this.writeState(final)
+        if (final.engine && final.engine.to_act !== null) {
+          const nextSeat = final.seats[engineSeatToDoSeat(final, final.engine.to_act)]
+          if (nextSeat?.kind === "bot") {
+            await this.ctx.storage.setAlarm(Date.now() + BOT_ACT_DELAY_MS)
+          }
+        }
+      }
+      return { ok: true }
     }
 
     if (name === "get_state") {
