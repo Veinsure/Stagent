@@ -1,4 +1,4 @@
-import { BOT_ACT_DELAY_MS, DEMO_TABLES, isDemoRoom, STARTING_CHIPS } from "./config.js"
+import { AGENT_GRACE_MS, BOT_ACT_DELAY_MS, DEMO_TABLES, isDemoRoom, STARTING_CHIPS } from "./config.js"
 import type { DOState, Seat } from "./state.js"
 import { publicView } from "./state.js"
 import { advanceBotsOnly, engineSeatToDoSeat, refillBankrupt, startHand } from "./game-loop.js"
@@ -63,10 +63,37 @@ export class TableDO {
       await this.alarm()
       return new Response("ok")
     }
+    if (parts[2] === "__reapIdle") {
+      await this.reapIdleAgents()
+      return new Response("ok")
+    }
     return new Response("not implemented", { status: 501 })
   }
 
+  protected async reapIdleAgents(): Promise<void> {
+    const s = await this.readState()
+    const now = Date.now()
+    const next: DOState = { ...s, seats: [...s.seats] }
+    let changed = false
+    for (let i = 0; i < next.seats.length; i++) {
+      const seat = next.seats[i]
+      if (!seat || seat.kind !== "agent") continue
+      if (now - seat.lastSeenMs < AGENT_GRACE_MS) continue
+      changed = true
+      if (s.kind === "demo") {
+        next.seats[i] = { kind: "empty" }
+        broadcastEvent(this.ctx, { type: "seat_update", seat: i, kind: "empty" })
+      } else {
+        const botName = `RandomBot-${i}`
+        next.seats[i] = { kind: "bot", name: botName, chips: seat.chips }
+        broadcastEvent(this.ctx, { type: "seat_update", seat: i, kind: "bot", name: botName })
+      }
+    }
+    if (changed) await this.writeState(next)
+  }
+
   async alarm(): Promise<void> {
+    await this.reapIdleAgents()
     const s = await this.readState()
     if (!s.engine) return
     const { state: advanced, steps } = advanceBotsOnly(s, () => Math.random())
