@@ -83,8 +83,28 @@ export async function me(): Promise<UserPrivate | null> {
 
 // ========== Users ==========
 
+export interface UserProfileResponse {
+  user: UserPublic
+  live: LiveAgent[]
+  is_following: boolean
+  followers_count: number
+}
+
 export async function getUser(name: string) {
-  return req<{ user: UserPublic; live: LiveAgent[] }>(`/api/users/${encodeURIComponent(name)}`)
+  return req<UserProfileResponse>(`/api/users/${encodeURIComponent(name)}`)
+}
+
+export async function followUser(name: string) {
+  return req<{ ok: true; already?: boolean }>(`/api/users/${encodeURIComponent(name)}/follow`, {
+    method: "POST",
+  })
+}
+
+export async function unfollowUser(name: string) {
+  await fetch(`/api/users/${encodeURIComponent(name)}/follow`, {
+    method: "DELETE",
+    credentials: "include",
+  })
 }
 
 // ========== Agents ==========
