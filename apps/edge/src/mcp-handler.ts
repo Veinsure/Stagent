@@ -1,4 +1,5 @@
 import { TOOLS } from "./mcp-schemas.js"
+import type { AgentContext } from "./auth/bearer.js"
 
 interface JsonRpcReq {
   jsonrpc: "2.0"
@@ -10,7 +11,8 @@ interface JsonRpcReq {
 export interface McpHandlerCtx {
   getSessionId: () => string | null
   newSessionId: () => string
-  callTool: (name: string, args: any, sessionId: string) => Promise<any>
+  callTool: (name: string, args: any, sessionId: string, agent: AgentContext | null) => Promise<any>
+  agent: AgentContext | null
 }
 
 export async function handleMcpRequest(req: Request, ctx: McpHandlerCtx): Promise<Response> {
@@ -44,7 +46,7 @@ export async function handleMcpRequest(req: Request, ctx: McpHandlerCtx): Promis
       return Response.json({ jsonrpc: "2.0", id, error: { code: -32002, message: "no session" } })
     }
     try {
-      const result = await ctx.callTool(params.name, params.arguments ?? {}, sid)
+      const result = await ctx.callTool(params.name, params.arguments ?? {}, sid, ctx.agent)
       return Response.json({
         jsonrpc: "2.0", id,
         result: { content: [{ type: "text", text: JSON.stringify(result) }] },

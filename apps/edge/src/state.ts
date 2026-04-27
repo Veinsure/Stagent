@@ -3,7 +3,17 @@ import type { TexasHoldemState } from "@stagent/texas-holdem"
 export type Seat =
   | { kind: "empty" }
   | { kind: "bot"; name: string; chips: number }
-  | { kind: "agent"; name: string; chips: number; mcpSessionId: string; lastSeenMs: number }
+  | {
+      kind: "agent"
+      name: string
+      chips: number
+      mcpSessionId: string
+      lastSeenMs: number
+      userId: string | null
+      agentId: string | null
+      avatarUrl: string | null
+      color: string | null
+    }
 
 export interface DOState {
   kind: "demo" | "private"

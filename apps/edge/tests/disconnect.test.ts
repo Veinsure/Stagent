@@ -16,6 +16,7 @@ describe("agent disconnect", () => {
       s.seats[3] = {
         kind: "agent", name: "Ghost", chips: STARTING_CHIPS,
         mcpSessionId: "dead", lastSeenMs: Date.now() - AGENT_GRACE_MS - 1000,
+        userId: null, agentId: null, avatarUrl: null, color: null,
       }
       await obj.writeState(s)
     })
@@ -38,6 +39,7 @@ describe("agent disconnect", () => {
       s.seats[0] = {
         kind: "agent", name: "Ghost", chips: STARTING_CHIPS,
         mcpSessionId: "dead", lastSeenMs: Date.now() - AGENT_GRACE_MS - 1000,
+        userId: null, agentId: null, avatarUrl: null, color: null,
       }
       await obj.writeState(s)
     })

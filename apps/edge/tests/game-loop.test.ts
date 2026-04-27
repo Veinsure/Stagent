@@ -36,6 +36,7 @@ describe("game loop", () => {
     base.seats[2] = {
       kind: "agent", name: "User", chips: STARTING_CHIPS,
       mcpSessionId: "s1", lastSeenMs: Date.now(),
+      userId: null, agentId: null, avatarUrl: null, color: null,
     }
     const started = startHand(base, { seed: "test-seed-3" })
     const { state: after } = advanceBotsOnly(started, () => 0.5)

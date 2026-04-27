@@ -6,13 +6,19 @@ import { broadcastEvent, handleWsUpgrade } from "./ws-handler.js"
 import { handleMcpRequest } from "./mcp-handler.js"
 import { actInput, sayInput, sitDownInput } from "./mcp-schemas.js"
 import { TexasHoldemModule } from "@stagent/texas-holdem"
+import type { AgentContext } from "./auth/bearer.js"
 
 const STATE_KEY = "state"
+
+interface DOEnv {
+  DB: D1Database
+  PRESENCE: KVNamespace
+}
 
 export class TableDO {
   protected state: DOState | null = null
 
-  constructor(protected ctx: DurableObjectState, protected env: unknown) {}
+  constructor(protected ctx: DurableObjectState, protected env: DOEnv) {}
 
   async fetch(req: Request): Promise<Response> {
     const url = new URL(req.url)
@@ -29,10 +35,14 @@ export class TableDO {
           return new Response("unauthorized", { status: 403 })
         }
       }
+      const { lookupAgentByBearer, touchAgentLastUsed } = await import("./auth/bearer.js")
+      const agentCtx = await lookupAgentByBearer(req, this.env)
+      if (agentCtx) await touchAgentLastUsed(this.env, agentCtx.agentId)
       return handleMcpRequest(req, {
         getSessionId: () => req.headers.get("Mcp-Session-Id"),
         newSessionId: () => crypto.randomUUID(),
-        callTool: (name, args, sid) => this.callMcpTool(name, args, sid),
+        agent: agentCtx,
+        callTool: (name, args, sid, agent) => this.callMcpTool(name, args, sid, agent),
       })
     }
     if (parts[2] === "ws") {
@@ -150,7 +160,7 @@ export class TableDO {
   async webSocketMessage(_ws: WebSocket, _msg: string | ArrayBuffer): Promise<void> {}
   async webSocketClose(_ws: WebSocket, _code: number, _reason: string, _wasClean: boolean): Promise<void> {}
 
-  protected async callMcpTool(name: string, args: any, sid: string): Promise<any> {
+  protected async callMcpTool(name: string, args: any, sid: string, agent: AgentContext | null): Promise<any> {
     const s = await this.readState()
 
     if (name === "sit_down") {
@@ -163,14 +173,23 @@ export class TableDO {
       const openIdx = s.seats.findIndex(seat => seat.kind === "empty")
       if (openIdx < 0) throw new Error("seat_taken")
 
+      const displayName = agent?.name ?? agentName ?? `guest-${sid.slice(0, 4)}`
+
       const next: DOState = { ...s, seats: [...s.seats] }
       next.seats[openIdx] = {
-        kind: "agent", name: agentName, chips: STARTING_CHIPS,
-        mcpSessionId: sid, lastSeenMs: Date.now(),
+        kind: "agent",
+        name: displayName,
+        chips: STARTING_CHIPS,
+        mcpSessionId: sid,
+        lastSeenMs: Date.now(),
+        userId: agent?.userId ?? null,
+        agentId: agent?.agentId ?? null,
+        avatarUrl: agent?.avatarUrl ?? null,
+        color: agent?.color ?? null,
       }
       next.lastActivityMs = Date.now()
       await this.writeState(next)
-      broadcastEvent(this.ctx, { type: "seat_update", seat: openIdx, kind: "agent", name: agentName })
+      broadcastEvent(this.ctx, { type: "seat_update", seat: openIdx, kind: "agent", name: displayName })
 
       const seated = next.seats.filter(x => x.kind !== "empty").length
       if (seated >= 2 && !next.engine) {
