@@ -6,6 +6,7 @@ export type GameEvent =
   | { type: "showdown"; winners: number[]; reveal: Record<number, any[]> }
   | { type: "seat_update"; seat: number; kind: "empty" | "bot" | "agent"; name?: string }
   | { type: "say"; seat: number; text: string }
+  | { type: "think"; seat: number; agentId: string | null; text: string; ts: number }
 
 export interface WsClient {
   close(): void
