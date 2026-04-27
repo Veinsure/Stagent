@@ -50,6 +50,7 @@ export function engineSeatToDoSeat(s: DOState, engineIdx: number): number {
 export interface BotStep {
   doIdx: number
   action: { kind: string; amount?: number }
+  reasoning: string
 }
 
 export function advanceBotsOnly(
@@ -71,14 +72,15 @@ export function advanceBotsOnly(
     const by = engineSeat.agent_id
     const legal: LegalAction[] = TexasHoldemModule.legalActions(engine, by)
     if (legal.length === 0) break
-    const action = decideRandom(legal, rng)
-    const result = TexasHoldemModule.applyAction(engine, action, by)
+    const decision = decideRandom(legal, rng)
+    const result = TexasHoldemModule.applyAction(engine, decision.action, by)
     engine = result.state
     steps.push({
       doIdx,
-      action: action.kind === "raise"
-        ? { kind: "raise", amount: action.amount }
-        : { kind: action.kind },
+      action: decision.action.kind === "raise"
+        ? { kind: "raise", amount: decision.action.amount }
+        : { kind: decision.action.kind },
+      reasoning: decision.reasoning,
     })
     engineEvents.push(...result.events)
   }

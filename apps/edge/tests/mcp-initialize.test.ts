@@ -21,11 +21,11 @@ describe("MCP initialize + tools/list", () => {
     expect(body.result.serverInfo.name).toBe("stagent")
   })
 
-  it("tools/list returns 4 MVP tools", async () => {
+  it("tools/list returns 5 V3 tools", async () => {
     const { body } = await rpc("mcp-init-room", {
       jsonrpc: "2.0", id: 2, method: "tools/list", params: {},
     })
     const names = body.result.tools.map((t: any) => t.name)
-    expect(names).toEqual(["sit_down", "get_state", "act", "say"])
+    expect(names).toEqual(["sit_down", "get_state", "act", "say", "think"])
   })
 })

@@ -4,7 +4,7 @@ import { publicView } from "./state.js"
 import { advanceBotsOnly, engineSeatToDoSeat, refillBankrupt, startHand } from "./game-loop.js"
 import { broadcastEvent, handleWsUpgrade } from "./ws-handler.js"
 import { handleMcpRequest } from "./mcp-handler.js"
-import { actInput, sayInput, sitDownInput } from "./mcp-schemas.js"
+import { actInput, sayInput, sitDownInput, thinkInput } from "./mcp-schemas.js"
 import { TexasHoldemModule } from "@stagent/texas-holdem"
 import type { AgentContext } from "./auth/bearer.js"
 
@@ -125,6 +125,10 @@ export class TableDO {
 
     for (const step of steps) {
       broadcastEvent(this.ctx, {
+        type: "think", seat: step.doIdx,
+        agentId: null, text: step.reasoning, ts: Date.now(),
+      })
+      broadcastEvent(this.ctx, {
         type: "action",
         seat: step.doIdx,
         action: step.action.kind,
@@ -234,6 +238,13 @@ export class TableDO {
 
       const result = TexasHoldemModule.applyAction(s.engine, engineAction, by)
       const afterAct: DOState = { ...s, engine: result.state, lastActivityMs: Date.now() }
+      if (parsed.reasoning) {
+        broadcastEvent(this.ctx, {
+          type: "think", seat: mySeat,
+          agentId: agent?.agentId ?? null,
+          text: parsed.reasoning, ts: Date.now(),
+        })
+      }
       broadcastEvent(this.ctx, {
         type: "action", seat: mySeat, action,
         ...(parsed.amount !== undefined ? { amount: parsed.amount } : {}),
@@ -242,6 +253,10 @@ export class TableDO {
 
       const { state: advanced, steps } = advanceBotsOnly(afterAct, () => Math.random())
       for (const step of steps) {
+        broadcastEvent(this.ctx, {
+          type: "think", seat: step.doIdx,
+          agentId: null, text: step.reasoning, ts: Date.now(),
+        })
         broadcastEvent(this.ctx, {
           type: "action", seat: step.doIdx, action: step.action.kind,
           ...(step.action.amount !== undefined ? { amount: step.action.amount } : {}),
@@ -276,6 +291,18 @@ export class TableDO {
       const mySeat = s.seats.findIndex(seat => seat.kind === "agent" && seat.mcpSessionId === sid)
       if (mySeat < 0) throw new Error("not_seated")
       broadcastEvent(this.ctx, { type: "say", seat: mySeat, text })
+      return { ok: true }
+    }
+
+    if (name === "think") {
+      const { text } = thinkInput.parse(args)
+      const mySeat = s.seats.findIndex(seat => seat.kind === "agent" && seat.mcpSessionId === sid)
+      if (mySeat < 0) throw new Error("not_seated")
+      broadcastEvent(this.ctx, {
+        type: "think", seat: mySeat,
+        agentId: agent?.agentId ?? null,
+        text, ts: Date.now(),
+      })
       return { ok: true }
     }
 
