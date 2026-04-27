@@ -2,7 +2,9 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { Avatar } from "@/components/Avatar"
 import { LiveBadge } from "@/components/LiveBadge"
+import { FollowButton } from "@/components/FollowButton"
 import { getCurrentUser } from "@/lib/auth"
+import { cookies } from "next/headers"
 
 const EDGE_URL = process.env.NEXT_PUBLIC_EDGE_URL ?? "http://localhost:8787"
 
@@ -13,12 +15,19 @@ interface Props {
 
 export default async function UserPage({ params, searchParams }: Props) {
   const name = decodeURIComponent(params.name)
-  const res = await fetch(`${EDGE_URL}/api/users/${encodeURIComponent(name)}`, { cache: "no-store" })
+  const cookieStore = cookies()
+  const sid = cookieStore.get("stg_sid")?.value
+  const res = await fetch(`${EDGE_URL}/api/users/${encodeURIComponent(name)}`, {
+    cache: "no-store",
+    headers: sid ? { Cookie: `stg_sid=${sid}` } : {},
+  })
   if (res.status === 404) notFound()
   if (!res.ok) throw new Error(`failed: ${res.status}`)
   const data = await res.json() as {
     user: { display_name: string; avatar_url: string | null; bio: string | null; created_at: number }
     live: Array<{ agent_id: string; agent_name: string; room: string }>
+    is_following: boolean
+    followers_count: number
   }
 
   const me = await getCurrentUser()
@@ -37,13 +46,16 @@ export default async function UserPage({ params, searchParams }: Props) {
           {data.user.bio && <p className="text-sm text-text-muted mt-1">{data.user.bio}</p>}
           <p className="text-xs text-text-muted mt-1">
             注册于 {new Date(data.user.created_at).toLocaleDateString()}
+            {" · "}
+            {data.followers_count} 粉丝
           </p>
         </div>
-        {!isSelf && (
-          <button className="px-3 py-1.5 rounded bg-accent hover:bg-accent-hover text-text-onAccent text-sm font-medium opacity-50 cursor-not-allowed" title="V3.1">
-            关注
-          </button>
-        )}
+        <FollowButton
+          userName={data.user.display_name}
+          initialFollowing={data.is_following}
+          isSelf={isSelf}
+          isAuthenticated={me !== null}
+        />
       </header>
 
       {data.live.length > 0 && (
@@ -76,13 +88,13 @@ export default async function UserPage({ params, searchParams }: Props) {
             <Link href="/me/agents" className="px-3 py-1.5 rounded border border-border text-sm hover:border-accent">
               我的 Agent
             </Link>
-            <Link href="/me/replays" className="px-3 py-1.5 rounded border border-border text-sm hover:border-accent opacity-50 cursor-not-allowed" title="V3.1">
+            <Link href="/me/replays" className="px-3 py-1.5 rounded border border-border text-sm hover:border-accent opacity-50 cursor-not-allowed" title="V3.x 后期">
               我的回放
             </Link>
-            <Link href="/me/bookmarks" className="px-3 py-1.5 rounded border border-border text-sm hover:border-accent opacity-50 cursor-not-allowed" title="V3.1">
+            <Link href="/me/bookmarks" className="px-3 py-1.5 rounded border border-border text-sm hover:border-accent opacity-50 cursor-not-allowed" title="V3.x 后期">
               收藏
             </Link>
-            <Link href="/me/settings" className="px-3 py-1.5 rounded border border-border text-sm hover:border-accent opacity-50 cursor-not-allowed" title="V3.1">
+            <Link href="/me/settings" className="px-3 py-1.5 rounded border border-border text-sm hover:border-accent opacity-50 cursor-not-allowed" title="V3.x 后期">
               设置
             </Link>
           </div>

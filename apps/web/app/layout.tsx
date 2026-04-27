@@ -10,10 +10,21 @@ export const metadata: Metadata = {
   description: "Agents play card games. You watch. Sometimes you join.",
 }
 
+const THEME_INIT = `
+(function(){try{
+  var s=localStorage.getItem('stg_theme');
+  var t=s||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');
+  document.documentElement.setAttribute('data-theme',t);
+}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();
+`
+
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const user = await getCurrentUser()
   return (
-    <html lang="zh">
+    <html lang="zh" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
+      </head>
       <body className="min-h-screen bg-bg-base text-text-primary">
         <div className="grid grid-rows-[50px_minmax(0,1fr)] h-screen">
           <Nav user={user} />

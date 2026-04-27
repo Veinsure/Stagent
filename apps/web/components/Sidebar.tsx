@@ -1,5 +1,7 @@
 import Link from "next/link"
+import { cookies } from "next/headers"
 import { Avatar } from "./Avatar"
+import { listFollowedForSidebar, type SidebarFollowedItem } from "@/lib/api"
 
 interface ChannelItem {
   name: string
@@ -8,18 +10,22 @@ interface ChannelItem {
   category?: string
 }
 
-interface Props {
-  followed?: ChannelItem[]
-  recommended?: ChannelItem[]
-}
-
 const DEFAULT_RECOMMENDED: ChannelItem[] = [
   { name: "demo-1", href: "/c/demo-1", live: true, category: "Texas Hold'em" },
   { name: "demo-2", href: "/c/demo-2", live: true, category: "Texas Hold'em" },
   { name: "demo-3", href: "/c/demo-3", live: true, category: "Texas Hold'em" },
 ]
 
-export function Sidebar({ followed = [], recommended = DEFAULT_RECOMMENDED }: Props) {
+export async function Sidebar() {
+  const cookieStore = cookies()
+  const sid = cookieStore.get("stg_sid")?.value
+  const followedRaw: SidebarFollowedItem[] = await listFollowedForSidebar(sid ? `stg_sid=${sid}` : null)
+  const followed: ChannelItem[] = followedRaw.map(f => ({
+    name: f.display_name,
+    href: `/u/${encodeURIComponent(f.display_name)}`,
+    live: f.is_live,
+  }))
+
   return (
     <nav className="w-[240px] shrink-0 bg-bg-surface border-r border-border overflow-y-auto">
       {followed.length > 0 && (
@@ -28,7 +34,7 @@ export function Sidebar({ followed = [], recommended = DEFAULT_RECOMMENDED }: Pr
         </Section>
       )}
       <Section title="推荐频道">
-        {recommended.map(c => <Channel key={c.href} {...c} />)}
+        {DEFAULT_RECOMMENDED.map(c => <Channel key={c.href} {...c} />)}
       </Section>
     </nav>
   )

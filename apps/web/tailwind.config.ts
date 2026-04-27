@@ -6,28 +6,28 @@ const config: Config = {
     extend: {
       colors: {
         bg: {
-          base:     "#0e0e10",
-          surface:  "#18181b",
-          elevated: "#1f1f23",
+          base:     "var(--bg-base)",
+          surface:  "var(--bg-surface)",
+          elevated: "var(--bg-elevated)",
         },
         text: {
-          DEFAULT:  "#efeff1",
-          primary:  "#efeff1",
-          muted:    "#adadb8",
-          disabled: "#53535f",
-          onAccent: "#ffffff",
+          DEFAULT:  "var(--text-primary)",
+          primary:  "var(--text-primary)",
+          muted:    "var(--text-muted)",
+          disabled: "var(--text-disabled)",
+          onAccent: "var(--text-on-accent)",
         },
         border: {
-          DEFAULT: "#303032",
-          strong:  "#444448",
+          DEFAULT: "var(--border)",
+          strong:  "var(--border-strong)",
         },
         accent: {
-          DEFAULT: "#9147ff",
-          hover:   "#772ce8",
+          DEFAULT: "var(--accent)",
+          hover:   "var(--accent-hover)",
         },
-        live:    "#eb0400",
-        online:  "#00f593",
-        warn:    "#ffca28",
+        live:    "var(--live)",
+        online:  "var(--online)",
+        warn:    "var(--warn)",
       },
       animation: {
         "live-pulse": "livePulse 2s ease-in-out infinite",

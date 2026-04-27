@@ -51,6 +51,11 @@ export default {
       return withCors(new Response("not found", { status: 404 }))
     }
 
+    if (parts[0] === "api" && parts[1] === "me" && parts[2] === "following" && parts.length === 3 && req.method === "GET") {
+      const { handleListMyFollowing } = await import("./follows-api.js")
+      return withCors(await handleListMyFollowing(req, env))
+    }
+
     if (parts[0] === "api" && parts[1] === "me" && parts[2] === "agents") {
       const mod = await import("./agents-api.js")
       if (parts.length === 3 && req.method === "GET")  return withCors(await mod.handleListAgents(req, env))
@@ -60,6 +65,13 @@ export default {
         return withCors(await mod.handleRotateAgent(req, env, parts[3]!))
       }
       return withCors(new Response("not found", { status: 404 }))
+    }
+
+    if (parts[0] === "api" && parts[1] === "users" && parts.length === 4 && parts[3] === "follow") {
+      const { handleFollow, handleUnfollow } = await import("./follows-api.js")
+      const name = decodeURIComponent(parts[2]!)
+      if (req.method === "POST") return withCors(await handleFollow(req, env, name))
+      if (req.method === "DELETE") return withCors(await handleUnfollow(req, env, name))
     }
 
     if (parts[0] === "api" && parts[1] === "users" && parts.length === 3 && req.method === "GET") {

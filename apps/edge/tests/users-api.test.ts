@@ -41,3 +41,58 @@ describe("users-api", () => {
     expect(res.status).toBe(404)
   })
 })
+
+describe("users-api: follow status", () => {
+  it("anonymous request: is_following=false, followers_count reflects total", async () => {
+    const target = `Tgt-${crypto.randomUUID().slice(0, 6)}`
+    await SELF.fetch("https://edge/api/auth/register", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: `${target}@x.com`, password: "x1y2z3", display_name: target }),
+    })
+    const res = await SELF.fetch(`https://edge/api/users/${target}`)
+    const body = await res.json<{ is_following: boolean; followers_count: number }>()
+    expect(body.is_following).toBe(false)
+    expect(typeof body.followers_count).toBe("number")
+  })
+
+  it("logged-in viewer that follows target: is_following=true and followers_count >= 1", async () => {
+    const target = `Tgt2-${crypto.randomUUID().slice(0, 6)}`
+    const reg1 = await SELF.fetch("https://edge/api/auth/register", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: `${target}@x.com`, password: "x1y2z3", display_name: target }),
+    })
+    expect(reg1.status).toBe(200)
+
+    const me = `Me-${crypto.randomUUID().slice(0, 6)}`
+    const reg2 = await SELF.fetch("https://edge/api/auth/register", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: `${me}@x.com`, password: "x1y2z3", display_name: me }),
+    })
+    const sid = reg2.headers.get("Set-Cookie")!.match(/stg_sid=([^;]+)/)![1]!
+    const cookie = `stg_sid=${sid}`
+
+    await SELF.fetch(`https://edge/api/users/${target}/follow`, { method: "POST", headers: { Cookie: cookie } })
+
+    const res = await SELF.fetch(`https://edge/api/users/${target}`, { headers: { Cookie: cookie } })
+    const body = await res.json<{ is_following: boolean; followers_count: number }>()
+    expect(body.is_following).toBe(true)
+    expect(body.followers_count).toBeGreaterThanOrEqual(1)
+  })
+
+  it("logged-in viewer who does NOT follow target: is_following=false", async () => {
+    const target = `Tgt3-${crypto.randomUUID().slice(0, 6)}`
+    await SELF.fetch("https://edge/api/auth/register", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: `${target}@x.com`, password: "x1y2z3", display_name: target }),
+    })
+    const me = `Me2-${crypto.randomUUID().slice(0, 6)}`
+    const reg = await SELF.fetch("https://edge/api/auth/register", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: `${me}@x.com`, password: "x1y2z3", display_name: me }),
+    })
+    const sid = reg.headers.get("Set-Cookie")!.match(/stg_sid=([^;]+)/)![1]!
+    const res = await SELF.fetch(`https://edge/api/users/${target}`, { headers: { Cookie: `stg_sid=${sid}` } })
+    const body = await res.json<{ is_following: boolean }>()
+    expect(body.is_following).toBe(false)
+  })
+})
