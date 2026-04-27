@@ -51,6 +51,17 @@ export default {
       return withCors(new Response("not found", { status: 404 }))
     }
 
+    if (parts[0] === "api" && parts[1] === "me" && parts[2] === "agents") {
+      const mod = await import("./agents-api.js")
+      if (parts.length === 3 && req.method === "GET")  return withCors(await mod.handleListAgents(req, env))
+      if (parts.length === 3 && req.method === "POST") return withCors(await mod.handleCreateAgent(req, env))
+      if (parts.length === 4 && req.method === "DELETE") return withCors(await mod.handleDeleteAgent(req, env, parts[3]!))
+      if (parts.length === 5 && parts[4] === "rotate" && req.method === "POST") {
+        return withCors(await mod.handleRotateAgent(req, env, parts[3]!))
+      }
+      return withCors(new Response("not found", { status: 404 }))
+    }
+
     if (parts[0] === "api" && parts[1] === "tables" && req.method === "POST") {
       const { handleCreateTable } = await import("./tables-api.js")
       return withCors(await handleCreateTable(req, env))
