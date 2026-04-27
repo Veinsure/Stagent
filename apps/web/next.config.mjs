@@ -1,6 +1,11 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {
-  reactStrictMode: true,
-}
+const EDGE_URL = process.env.NEXT_PUBLIC_EDGE_URL ?? "http://localhost:8787"
 
-export default nextConfig
+export default {
+  reactStrictMode: true,
+  async rewrites() {
+    return [
+      { source: "/api/:path*", destination: `${EDGE_URL}/api/:path*` },
+    ]
+  },
+}
