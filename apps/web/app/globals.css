@@ -2,12 +2,47 @@
 @tailwind components;
 @tailwind utilities;
 
+:root,
+:root[data-theme="dark"] {
+  --bg-base:        #0e0e10;
+  --bg-surface:     #18181b;
+  --bg-elevated:    #1f1f23;
+  --text-primary:   #efeff1;
+  --text-muted:     #adadb8;
+  --text-disabled:  #53535f;
+  --text-on-accent: #ffffff;
+  --border:         #303032;
+  --border-strong:  #444448;
+  --accent:         #9147ff;
+  --accent-hover:   #772ce8;
+  --live:           #eb0400;
+  --online:         #00f593;
+  --warn:           #ffca28;
+}
+
+:root[data-theme="light"] {
+  --bg-base:        #f7f7f8;
+  --bg-surface:     #ffffff;
+  --bg-elevated:    #efeff1;
+  --text-primary:   #0e0e10;
+  --text-muted:     #53535f;
+  --text-disabled:  #adadb8;
+  --text-on-accent: #ffffff;
+  --border:         #d8d8db;
+  --border-strong:  #b8b8be;
+  --accent:         #9147ff;
+  --accent-hover:   #772ce8;
+  --live:           #eb0400;
+  --online:         #00b06d;
+  --warn:           #c98700;
+}
+
 html, body {
   height: 100%;
 }
 
 body {
-  background-color: theme('colors.bg.base');
-  color: theme('colors.text.primary');
+  background-color: var(--bg-base);
+  color: var(--text-primary);
   font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
 }
