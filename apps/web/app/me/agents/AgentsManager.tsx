@@ -136,11 +136,21 @@ function RevealedTokenBox({
   edgeUrl: string
   onClose: () => void
 }) {
+  const mcpUrl = `${edgeUrl}/c/demo-1/mcp`
+
+  const claudeCodeCli =
+`claude mcp add --transport http stagent ${mcpUrl} \\
+  --header "Authorization: Bearer ${revealed.token}"`
+
   const claudeSnippet = JSON.stringify({
     mcpServers: {
       stagent: {
-        url: `${edgeUrl}/mcp`,
-        headers: { Authorization: `Bearer ${revealed.token}` },
+        command: "npx",
+        args: [
+          "-y", "mcp-remote",
+          mcpUrl,
+          "--header", `Authorization:Bearer ${revealed.token}`,
+        ],
       },
     },
   }, null, 2)
@@ -148,7 +158,7 @@ function RevealedTokenBox({
   const pythonSnippet =
 `from mcp import McpClient
 client = McpClient(
-    url="${edgeUrl}/c/demo-1/mcp",
+    url="${mcpUrl}",
     headers={"Authorization": "Bearer ${revealed.token}"},
 )
 await client.call_tool("sit_down", {"name": "${revealed.name}"})
@@ -164,14 +174,46 @@ while True:
 3. Optional: call think({text}) to broadcast a thought without acting
 4. Continue until told to leave or table closes`
 
+  function downloadAll() {
+    const payload = {
+      agent: { id: revealed.id, name: revealed.name },
+      token: revealed.token,
+      mcp_url: mcpUrl,
+      claude_code_cli: claudeCodeCli,
+      claude_desktop_config: JSON.parse(claudeSnippet),
+      python_example: pythonSnippet,
+      system_prompt: promptSnippet,
+      generated_at: new Date().toISOString(),
+      warning: "Token is shown ONCE. Keep this file safe — anyone with it can act as this agent.",
+    }
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" })
+    const safeName = revealed.name.replace(/[^a-zA-Z0-9_-]/g, "_")
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `stagent-agent-${safeName}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <section className="bg-bg-surface border border-warn rounded p-4 space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
           <div className="text-sm font-bold text-warn">⚠ 这是你看到 token 的唯一一次</div>
-          <div className="text-xs text-text-muted">关掉这个框后再也无法显示，请立即复制走或妥善保存。</div>
+          <div className="text-xs text-text-muted">关掉这个框后再也无法显示，请立即复制走或下载保存。</div>
         </div>
-        <button onClick={onClose} className="text-text-muted hover:text-text-primary text-sm">关闭 ✕</button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={downloadAll}
+            className="px-3 py-1.5 rounded bg-accent hover:bg-accent-hover text-text-onAccent text-xs font-medium"
+          >
+            ⬇ 下载全部
+          </button>
+          <button onClick={onClose} className="text-text-muted hover:text-text-primary text-sm">关闭 ✕</button>
+        </div>
       </div>
 
       <SnippetBox
@@ -180,7 +222,12 @@ while True:
       />
 
       <SnippetBox
-        label="Claude Desktop config (claude_desktop_config.json)"
+        label="Claude Code CLI (recommended — run in terminal)"
+        code={claudeCodeCli}
+      />
+
+      <SnippetBox
+        label="Claude Desktop config (claude_desktop_config.json — uses mcp-remote bridge)"
         code={claudeSnippet}
       />
 

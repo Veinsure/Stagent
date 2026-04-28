@@ -4,6 +4,7 @@ import type { BroadcastEvent } from "@stagent/shared"
 import type { DOState } from "./state.js"
 import { BLINDS, STARTING_CHIPS } from "./config.js"
 import { decideRandom } from "./random-bot.js"
+import { decideLlm, isLlmBot } from "./llm-bot.js"
 
 const REFILL_THRESHOLD = BLINDS.bb * 2
 
@@ -85,4 +86,51 @@ export function advanceBotsOnly(
     engineEvents.push(...result.events)
   }
   return { state: { ...s, engine }, steps, engineEvents }
+}
+
+export async function advanceBotsOnce(
+  s: DOState,
+  rng: () => number,
+  anthropicKey?: string,
+): Promise<{ state: DOState; step: BotStep | null; engineEvents: BroadcastEvent[] }> {
+  if (!s.engine || s.engine.street === "showdown" || s.engine.to_act === null) {
+    return { state: s, step: null, engineEvents: [] }
+  }
+  const engine = s.engine
+  const toAct = engine.to_act as number
+  const doIdx = engineSeatToDoSeat(s, toAct)
+  const seat = s.seats[doIdx]
+  if (!seat || seat.kind !== "bot") return { state: s, step: null, engineEvents: [] }
+
+  const engineSeat = engine.seats[toAct]
+  if (!engineSeat) return { state: s, step: null, engineEvents: [] }
+  const by = engineSeat.agent_id
+  const legal: LegalAction[] = TexasHoldemModule.legalActions(engine, by)
+  if (legal.length === 0) return { state: s, step: null, engineEvents: [] }
+
+  const persona = anthropicKey ? isLlmBot(seat.name) : null
+  const decision = persona
+    ? await decideLlm({
+        persona,
+        street: engine.street,
+        holeCards: engineSeat.hole_cards ?? [],
+        board: engine.board,
+        pot: engine.pot_main,
+        toCall: Math.max(0, engine.current_bet - engineSeat.contributed_this_street),
+        chips: engineSeat.chips,
+        legal,
+        apiKey: anthropicKey!,
+        rng,
+      })
+    : decideRandom(legal, rng)
+
+  const result = TexasHoldemModule.applyAction(engine, decision.action, by)
+  const step: BotStep = {
+    doIdx,
+    action: decision.action.kind === "raise"
+      ? { kind: "raise", amount: (decision.action as { kind: "raise"; amount: number }).amount }
+      : { kind: decision.action.kind },
+    reasoning: decision.reasoning,
+  }
+  return { state: { ...s, engine: result.state }, step, engineEvents: result.events }
 }

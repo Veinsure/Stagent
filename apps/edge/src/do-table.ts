@@ -1,7 +1,7 @@
 import { AGENT_GRACE_MS, BOT_ACT_DELAY_MS, DEMO_TABLES, IDLE_HIBERNATE_MS, isDemoRoom, STARTING_CHIPS } from "./config.js"
 import type { DOState, Seat } from "./state.js"
 import { publicView } from "./state.js"
-import { advanceBotsOnly, engineSeatToDoSeat, refillBankrupt, startHand } from "./game-loop.js"
+import { advanceBotsOnly, advanceBotsOnce, engineSeatToDoSeat, refillBankrupt, startHand } from "./game-loop.js"
 import { broadcastEvent, handleWsUpgrade } from "./ws-handler.js"
 import { handleMcpRequest } from "./mcp-handler.js"
 import { actInput, sayInput, sitDownInput, thinkInput } from "./mcp-schemas.js"
@@ -14,6 +14,7 @@ const STATE_KEY = "state"
 interface DOEnv {
   DB: D1Database
   PRESENCE: KVNamespace
+  ANTHROPIC_API_KEY?: string
 }
 
 export class TableDO {
@@ -124,10 +125,17 @@ export class TableDO {
   async alarm(): Promise<void> {
     await this.reapIdleAgents()
     const s = await this.readState()
-    if (!s.engine) return
-    const { state: advanced, steps } = advanceBotsOnly(s, () => Math.random())
 
-    for (const step of steps) {
+    if (!s.engine) {
+      if (s.seats.some(seat => seat.kind === "agent")) {
+        await this.ctx.storage.setAlarm(Date.now() + AGENT_GRACE_MS / 2)
+      }
+      return
+    }
+
+    const { state: advanced, step } = await advanceBotsOnce(s, () => Math.random(), this.env.ANTHROPIC_API_KEY)
+
+    if (step) {
       broadcastEvent(this.ctx, {
         type: "think", seat: step.doIdx,
         agentId: null, text: step.reasoning, ts: Date.now(),
@@ -166,10 +174,16 @@ export class TableDO {
     const live = after.engine
     if (live && live.street !== "showdown" && live.to_act !== null) {
       const doIdx = engineSeatToDoSeat(after, live.to_act)
-      const seat = after.seats[doIdx]
-      if (seat?.kind === "bot") {
+      const nextSeat = after.seats[doIdx]
+      if (nextSeat?.kind === "bot") {
         await this.ctx.storage.setAlarm(Date.now() + BOT_ACT_DELAY_MS)
+        return
       }
+    }
+
+    // No bot pending — keep heartbeat alive for agent presence reaping
+    if (after.seats.some(seat => seat.kind === "agent")) {
+      await this.ctx.storage.setAlarm(Date.now() + AGENT_GRACE_MS / 2)
     }
   }
 
@@ -218,8 +232,25 @@ export class TableDO {
         const started = startHand(next, { seed: `seed-${Date.now()}` })
         await this.writeState(started)
         await this.ctx.storage.setAlarm(Date.now() + BOT_ACT_DELAY_MS)
+      } else {
+        // Heartbeat alarm so the agent's seat is reaped if they go silent
+        await this.ctx.storage.setAlarm(Date.now() + AGENT_GRACE_MS)
       }
       return { seat: openIdx }
+    }
+
+    if (name === "leave_table") {
+      const mySeat = s.seats.findIndex(seat => seat.kind === "agent" && seat.mcpSessionId === sid)
+      if (mySeat < 0) return { ok: true, note: "not_seated" }
+      const leaving = s.seats[mySeat]!
+      if (leaving.kind === "agent" && leaving.userId && leaving.agentId) {
+        await deletePresence(this.env.PRESENCE, leaving.userId, leaving.agentId)
+      }
+      const next: DOState = { ...s, seats: [...s.seats] }
+      next.seats[mySeat] = { kind: "empty" }
+      await this.writeState(next)
+      broadcastEvent(this.ctx, { type: "seat_update", seat: mySeat, kind: "empty" })
+      return { ok: true }
     }
 
     if (name === "act") {
@@ -255,7 +286,11 @@ export class TableDO {
           : { kind: "all_in" as const }
 
       const result = TexasHoldemModule.applyAction(s.engine, engineAction, by)
-      const afterAct: DOState = { ...s, engine: result.state, lastActivityMs: Date.now() }
+      const me = s.seats[mySeat]
+      const updatedSeats = [...s.seats]
+      if (me?.kind === "agent") updatedSeats[mySeat] = { ...me, lastSeenMs: Date.now() }
+
+      const afterAct: DOState = { ...s, seats: updatedSeats, engine: result.state, lastActivityMs: Date.now() }
       if (parsed.reasoning) {
         broadcastEvent(this.ctx, {
           type: "think", seat: mySeat,
@@ -267,38 +302,24 @@ export class TableDO {
         type: "action", seat: mySeat, action,
         ...(parsed.amount !== undefined ? { amount: parsed.amount } : {}),
       })
-      await this.writeState(afterAct)
-
-      const { state: advanced, steps } = advanceBotsOnly(afterAct, () => Math.random())
-      for (const step of steps) {
-        broadcastEvent(this.ctx, {
-          type: "think", seat: step.doIdx,
-          agentId: null, text: step.reasoning, ts: Date.now(),
-        })
-        broadcastEvent(this.ctx, {
-          type: "action", seat: step.doIdx, action: step.action.kind,
-          ...(step.action.amount !== undefined ? { amount: step.action.amount } : {}),
-        })
-      }
 
       let final: DOState
-      if (advanced.engine?.street === "showdown") {
+      if (afterAct.engine?.street === "showdown") {
         broadcastEvent(this.ctx, { type: "showdown", winners: [], reveal: {} })
-        const refilled = refillBankrupt(advanced)
-        final = startHand(refilled, { seed: `seed-${Date.now()}-${advanced.handsPlayed}` })
+        const refilled = refillBankrupt(afterAct)
+        final = startHand(refilled, { seed: `seed-${Date.now()}-${afterAct.handsPlayed}` })
         broadcastEvent(this.ctx, {
           type: "hand_start", handId: final.handsPlayed, dealer: final.engine?.button ?? 0,
         })
-        await this.writeState(final)
-        await this.ctx.storage.setAlarm(Date.now() + BOT_ACT_DELAY_MS)
       } else {
-        final = advanced
-        await this.writeState(final)
-        if (final.engine && final.engine.to_act !== null) {
-          const nextSeat = final.seats[engineSeatToDoSeat(final, final.engine.to_act)]
-          if (nextSeat?.kind === "bot") {
-            await this.ctx.storage.setAlarm(Date.now() + BOT_ACT_DELAY_MS)
-          }
+        final = afterAct
+      }
+      await this.writeState(final)
+
+      if (final.engine && final.engine.street !== "showdown" && final.engine.to_act !== null) {
+        const nextDoIdx = engineSeatToDoSeat(final, final.engine.to_act)
+        if (final.seats[nextDoIdx]?.kind === "bot") {
+          await this.ctx.storage.setAlarm(Date.now() + BOT_ACT_DELAY_MS)
         }
       }
       return { ok: true }
@@ -391,7 +412,7 @@ export class TableDO {
   private initState(room: string): DOState {
     if (isDemoRoom(room)) {
       const cfg = DEMO_TABLES[room]
-      const seats: Seat[] = Array.from({ length: 4 }, (_, i) => {
+      const seats: Seat[] = Array.from({ length: cfg.totalSeats }, (_, i) => {
         const bot = cfg.botSeats.find((b) => b.seat === i)
         return bot
           ? { kind: "bot", name: bot.name, chips: STARTING_CHIPS }
@@ -402,8 +423,10 @@ export class TableDO {
     const seats: Seat[] = [
       { kind: "empty" },
       { kind: "bot", name: "RandomBot-1", chips: STARTING_CHIPS },
+      { kind: "empty" },
+      { kind: "empty" },
       { kind: "bot", name: "RandomBot-2", chips: STARTING_CHIPS },
-      { kind: "bot", name: "RandomBot-3", chips: STARTING_CHIPS },
+      { kind: "empty" },
     ]
     return { kind: "private", room, seats, engine: null, handsPlayed: 0, actionLog: [], lastActivityMs: Date.now() }
   }

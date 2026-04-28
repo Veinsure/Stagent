@@ -20,3 +20,7 @@ migrations_dir = "src/db/migrations"
 [[kv_namespaces]]
 binding = "PRESENCE"
 id = "00000000000000000000000000000000"
+
+# Set actual value with: wrangler secret put ANTHROPIC_API_KEY
+[vars]
+ANTHROPIC_API_KEY = ""

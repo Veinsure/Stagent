@@ -82,11 +82,14 @@ describe("think events", () => {
   })
 
   it("bot step emits a think with [RandomBot] template", async () => {
+    // Use a bots-only room so the first actor is guaranteed to be a bot
     const room = `bot-${crypto.randomUUID().slice(0, 6)}`
-    const sid = await newSession(room)
+    const stub = env.TABLE.get(env.TABLE.idFromName(room))
+    await stub.fetch(`http://edge/c/${room}/__init`, { method: "POST" })
     const { received } = await openWs(room)
-    await call(room, sid, "sit_down", { name: "Human" })
-    await new Promise(r => setTimeout(r, 800))
+    await stub.fetch(`http://edge/c/${room}/__startHand`, { method: "POST" })
+    await stub.fetch(`http://edge/c/${room}/__tick`, { method: "POST" })
+    await new Promise(r => setTimeout(r, 100))
     const botThink = received.find(e => e.type === "think" && e.text.startsWith("[RandomBot]"))
     expect(botThink).toBeTruthy()
   })

@@ -6,9 +6,12 @@ import { ThinkTab } from "./ThinkTab"
 import { SayTab } from "./SayTab"
 import { LogTab } from "./LogTab"
 
-interface Props { events: GameEvent[] }
+interface Props {
+  events: GameEvent[]
+  seatNames?: Record<number, string>
+}
 
-export function RightColumn({ events }: Props) {
+export function RightColumn({ events, seatNames = {} }: Props) {
   return (
     <Tabs
       tabs={[
@@ -18,8 +21,8 @@ export function RightColumn({ events }: Props) {
       ]}
       initialId="think"
       render={(id) => {
-        if (id === "think") return <ThinkTab events={events} />
-        if (id === "say") return <SayTab events={events} />
+        if (id === "think") return <ThinkTab events={events} seatNames={seatNames} />
+        if (id === "say") return <SayTab events={events} seatNames={seatNames} />
         return <LogTab events={events} />
       }}
     />

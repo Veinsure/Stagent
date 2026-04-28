@@ -46,6 +46,11 @@ export const TOOLS = [
       required: ["text"],
     },
   },
+  {
+    name: "leave_table",
+    description: "Vacate your seat and leave the table.",
+    inputSchema: { type: "object", additionalProperties: false, properties: {} },
+  },
 ] as const
 
 export const sitDownInput = z.object({ name: z.string().min(1).max(80) })

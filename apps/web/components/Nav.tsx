@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { Search } from "lucide-react"
-import { Avatar } from "./Avatar"
 import { ThemeToggle } from "./ThemeToggle"
+import { UserMenu } from "./UserMenu"
 import type { UserPrivate } from "@/lib/api"
 
 interface Props {
@@ -33,10 +33,7 @@ export function Nav({ user }: Props) {
       <div className="ml-auto flex items-center gap-3">
         <ThemeToggle />
         {user ? (
-          <Link href={`/u/${encodeURIComponent(user.display_name)}`} className="flex items-center gap-2">
-            <Avatar name={user.display_name} src={user.avatar_url} size={28} />
-            <span className="text-sm">{user.display_name}</span>
-          </Link>
+          <UserMenu user={user} />
         ) : (
           <>
             <Link href="/login" className="text-sm text-text-primary hover:text-accent">登录</Link>

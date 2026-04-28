@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { TableView } from "@/components/TableView"
+import { TableView, type RevealMap } from "@/components/TableView"
 import { RightColumn } from "@/components/right-column/RightColumn"
 import { LeaveModal } from "@/components/LeaveModal"
 import { openRoomSocket, type GameEvent, type WsClient } from "@/lib/ws-client"
@@ -17,6 +17,7 @@ export function RoomClient({ room }: Props) {
   const router = useRouter()
   const [snapshot, setSnapshot] = useState<any>(null)
   const [events, setEvents] = useState<GameEvent[]>([])
+  const [revealMap, setRevealMap] = useState<RevealMap>({})
   const [connected, setConnected] = useState(false)
   const [showLeaveModal, setShowLeaveModal] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
@@ -34,6 +35,10 @@ export function RoomClient({ room }: Props) {
       if (e.type === "snapshot") {
         setSnapshot(e.state)
         setConnected(true)
+      } else if (e.type === "hand_start") {
+        setRevealMap({})
+      } else if (e.type === "showdown") {
+        setRevealMap(e.reveal as RevealMap)
       } else if (e.type === "seat_update") {
         setSnapshot((prev: any) => {
           if (!prev) return prev
@@ -65,6 +70,15 @@ export function RoomClient({ room }: Props) {
     window.addEventListener("beforeunload", onBeforeUnload)
     return () => window.removeEventListener("beforeunload", onBeforeUnload)
   }, [room, isLoggedIn])
+
+  const seatNames: Record<number, string> = (() => {
+    if (!snapshot) return {}
+    const out: Record<number, string> = {}
+    snapshot.seats.forEach((s: any, i: number) => {
+      if (s && s.kind !== "empty" && s.name) out[i] = s.name
+    })
+    return out
+  })()
 
   function handleLeaveClick() {
     if (eligibleForReplay(bufferRef.current)) {
@@ -99,7 +113,7 @@ export function RoomClient({ room }: Props) {
             离开桌子
           </button>
         </div>
-        <TableView room={room} snapshot={snapshot} />
+        <TableView room={room} snapshot={snapshot} revealMap={revealMap} />
         {!connected && (
           <div className="px-6 text-xs text-text-muted">
             waiting for first snapshot from <code>{EDGE_URL}</code>…
@@ -107,7 +121,7 @@ export function RoomClient({ room }: Props) {
         )}
       </div>
       <aside className="border-l border-border bg-bg-surface min-h-0">
-        <RightColumn events={events} />
+        <RightColumn events={events} seatNames={seatNames} />
       </aside>
       <LeaveModal
         open={showLeaveModal}
